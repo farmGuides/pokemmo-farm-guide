@@ -4,8 +4,9 @@
      brazos espirales luminosos girando en sentido antihorario.
    - Espiral de profundidad: los 9 nodos emergen pequeños desde el centro
      detrás del bloque central (.hero-core), cruzan hacia primer plano solo
-     al despejar el perímetro de texto/buscador, crecen hacia los bordes,
-     se desvanecen al salir y reaparecen progresivamente al volver tras scroll.
+     al despejar las dos zonas medidas (título principal + cuerpo inferior),
+     crecen hacia los bordes, se desvanecen al salir y reaparecen de forma
+     progresiva al volver al hero tras hacer scroll.
    - Pausa automática fuera de pantalla, en pestaña oculta y reduced motion.
    ========================================================================== */
 (function () {
@@ -39,6 +40,10 @@
     if (!stage) return;
 
     var coreEl = hero.querySelector('.hero-core');
+    var wordmarkEl = hero.querySelector('.hero-wordmark');
+    var subtitleEl = hero.querySelector('.hero-subtitle');
+    var searchWrapEl = hero.querySelector('.hero-search-wrap');
+    var factsEl = hero.querySelector('.hero-facts');
     var canvas = stage.querySelector('.vortex-canvas');
     var ctx = canvas ? canvas.getContext('2d') : null;
     var nodeEls = Array.prototype.slice.call(stage.querySelectorAll('.vortex-node'));
@@ -51,8 +56,12 @@
     var state = {
       w: 0,
       h: 0,
-      coreHalfW: 340,
-      coreHalfH: 200,
+      wmHalfW: 480,
+      wmTop: -220,
+      wmBottom: -130,
+      bodyHalfW: 320,
+      bodyTop: -130,
+      bodyBottom: 220,
       dpr: 1,
       isMobile: false,
       isReduced: Boolean(reducedQuery && reducedQuery.matches),
@@ -105,7 +114,7 @@
       ];
     }
 
-    /* --- Geometría adaptable al hero y perímetro seguro de .hero-core --- */
+    /* --- Geometría adaptable al hero y dos zonas de despeje en .hero-core --- */
     function getGeometry() {
       var w = state.w || hero.clientWidth || window.innerWidth || 1280;
       var h = state.h || hero.clientHeight || window.innerHeight || 840;
@@ -123,8 +132,8 @@
         cy: cy,
         minDim: minDim,
         diagR: diagR,
-        rMin: minDim * 0.19,
-        rMax: diagR * 0.96,
+        rMin: minDim * 0.20,
+        rMax: diagR * 0.98,
         ryScale: ryScale
       };
     }
@@ -132,19 +141,43 @@
     function measure() {
       var winW = window.innerWidth || hero.clientWidth || 1024;
       state.isMobile = winW < MOBILE_BP;
-      var target = state.isMobile ? stage : hero;
-      var rect = target.getBoundingClientRect();
-      var w = Math.max(1, Math.round(rect.width || winW));
-      var h = Math.max(1, Math.round(rect.height || 360));
+      var heroRect = hero.getBoundingClientRect();
+      var targetRect = state.isMobile ? stage.getBoundingClientRect() : heroRect;
+      var w = Math.max(1, Math.round(targetRect.width || winW));
+      var h = Math.max(1, Math.round(targetRect.height || 360));
 
       state.w = w;
       state.h = h;
       state.dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-      if (coreEl) {
-        var coreRect = coreEl.getBoundingClientRect();
-        state.coreHalfW = coreRect.width ? coreRect.width * 0.5 : 340;
-        state.coreHalfH = coreRect.height ? coreRect.height * 0.5 : 200;
+      var heroCx = heroRect.left + heroRect.width * 0.5;
+      var heroCy = heroRect.top + heroRect.height * 0.5;
+      var coreRect = coreEl ? coreEl.getBoundingClientRect() : null;
+      var wmRect = wordmarkEl ? wordmarkEl.getBoundingClientRect() : null;
+      var subRect = subtitleEl ? subtitleEl.getBoundingClientRect() : null;
+      var searchRect = searchWrapEl ? searchWrapEl.getBoundingClientRect() : null;
+      var factsRect = factsEl ? factsEl.getBoundingClientRect() : null;
+
+      if (wmRect && wmRect.width > 0) {
+        state.wmHalfW = wmRect.width * 0.5;
+        state.wmTop = wmRect.top - heroCy;
+        state.wmBottom = wmRect.bottom - heroCy;
+      } else if (coreRect && coreRect.width > 0) {
+        state.wmHalfW = coreRect.width * 0.5;
+        state.wmTop = coreRect.top - heroCy;
+        state.wmBottom = state.wmTop + 90;
+      }
+
+      var subHalfW = subRect ? subRect.width * 0.5 : 0;
+      var searchHalfW = searchRect ? searchRect.width * 0.5 : 0;
+      state.bodyHalfW = Math.max(subHalfW, searchHalfW, 290);
+      state.bodyTop = state.wmBottom;
+      if (factsRect && factsRect.height > 0) {
+        state.bodyBottom = factsRect.bottom - heroCy;
+      } else if (coreRect && coreRect.height > 0) {
+        state.bodyBottom = coreRect.bottom - heroCy;
+      } else {
+        state.bodyBottom = 220;
       }
 
       if (canvas) {
@@ -317,13 +350,24 @@
         var edgeOutY = (Math.abs(y) - (halfH + 18)) / 64;
         var edgeFade = 1 - smoothstep(0, 1, Math.max(edgeOutX, edgeOutY));
 
-        /* Despeje real respecto al rectángulo medido de .hero-core */
-        var halfTile = 44 * baseScale + 10;
-        var normX = Math.abs(x) / Math.max(1, state.coreHalfW + halfTile);
-        var normY = Math.abs(y) / Math.max(1, state.coreHalfH + halfTile);
-        var coreDist = Math.max(normX, normY);
+        /* Despeje en dos zonas: banda del wordmark y cuerpo inferior */
+        var halfTile = 48 * baseScale + 10;
+        var wmDist = Math.max(
+          Math.abs(x) / Math.max(1, state.wmHalfW + halfTile),
+          (y < state.wmTop - halfTile || y > state.wmBottom + halfTile)
+            ? 1.25
+            : Math.abs(y - (state.wmTop + state.wmBottom) * 0.5) /
+              Math.max(1, (state.wmBottom - state.wmTop) * 0.5 + halfTile)
+        );
+        var bodyCy = (state.bodyTop + state.bodyBottom) * 0.5;
+        var bodyHalfH = Math.max(1, (state.bodyBottom - state.bodyTop) * 0.5);
+        var bodyDist = Math.max(
+          Math.abs(x) / Math.max(1, state.bodyHalfW + halfTile),
+          Math.abs(y - bodyCy) / Math.max(1, bodyHalfH + halfTile)
+        );
+        var coreDist = Math.min(wmDist, bodyDist);
         var insideCore = coreDist < 1.0;
-        var corePresence = 0.38 + 0.62 * smoothstep(0.75, 1.08, coreDist);
+        var corePresence = 0.36 + 0.64 * smoothstep(0.76, 1.08, coreDist);
 
         var reveal = 1;
         if (state.reentryStart) {
@@ -437,6 +481,7 @@
       });
       ro.observe(hero);
       if (coreEl) ro.observe(coreEl);
+      if (wordmarkEl) ro.observe(wordmarkEl);
     }
 
     if (typeof window.MutationObserver === 'function') {
