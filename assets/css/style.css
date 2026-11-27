@@ -239,6 +239,8 @@ html {
   overscroll-behavior: none;
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--header-height) + 16px);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 body {
@@ -255,6 +257,15 @@ body {
   caret-color: var(--accent);
   -webkit-font-smoothing: antialiased;
   padding-right: 44px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 main {
